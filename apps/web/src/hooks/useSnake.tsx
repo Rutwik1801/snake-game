@@ -8,18 +8,23 @@ import {
   TILE_SIZE,
 } from "../constants/constants";
 import type { CoOrdinateObject, Direction } from "../types/types";
-import { getRandomFood } from "../utils/utils";
+import { getRandomFood, toUnoccupiedCellId } from "../utils/utils";
 
 export const useSnake = (canvasRef: RefObject<HTMLCanvasElement | null>) => {
+  const unoccupiedCellsRef = useRef<Set<string>>(new Set());
+  const animationIdRef = useRef<number>(0);
   const snakeRef = useRef<CoOrdinateObject[]>(INITIAL_SNAKE);
   const directionRef = useRef<CoOrdinateObject>(
     DIRECTIONS_MAP[INITIAL_DIRECTION]
   );
-  const foodRef = useRef<CoOrdinateObject>(getRandomFood(snakeRef.current));
+  const foodRef = useRef<CoOrdinateObject>(
+    getRandomFood(unoccupiedCellsRef.current)
+  );
   const lastMoveRef = useRef<number>(0);
   const [score, setScore] = useState<number>(0);
   const [gameOver, setGameOver] = useState<boolean>(false);
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [paused, setPaused] = useState<boolean>(false);
 
   //   calculates the next cell to hop on
   const moveSnake = () => {
@@ -29,6 +34,7 @@ export const useSnake = (canvasRef: RefObject<HTMLCanvasElement | null>) => {
       x: (head.x + directionRef.current.x + GRID_SIZE) % GRID_SIZE,
       y: (head.y + directionRef.current.y + GRID_SIZE) % GRID_SIZE,
     };
+    unoccupiedCellsRef.current.delete(toUnoccupiedCellId(newHead.x, newHead.y));
 
     if (newSnake.some((seg) => seg.x === newHead.x && seg.y === newHead.y)) {
       setGameOver(true);
@@ -40,9 +46,11 @@ export const useSnake = (canvasRef: RefObject<HTMLCanvasElement | null>) => {
 
     if (newHead.x === foodRef.current.x && newHead.y === foodRef.current.y) {
       setScore((prev) => prev + 1);
-      foodRef.current = getRandomFood(newSnake);
+      foodRef.current = getRandomFood(unoccupiedCellsRef.current);
     } else {
-      newSnake.pop();
+      let tail = newSnake.pop();
+      if (tail)
+        unoccupiedCellsRef.current.add(toUnoccupiedCellId(tail.x, tail.y));
     }
 
     snakeRef.current = newSnake;
@@ -75,30 +83,46 @@ export const useSnake = (canvasRef: RefObject<HTMLCanvasElement | null>) => {
     }
   };
 
+  // continuous animation for snake
+  const loop = (time: number) => {
+    if (gameOver) return;
+    if (time - lastMoveRef.current > SPEED) {
+      moveSnake();
+      lastMoveRef.current = time;
+    }
+    draw();
+    animationIdRef.current = requestAnimationFrame(loop);
+  };
+
   useEffect(() => {
     if (!isRunning) return;
-    let animationId: number;
-    // continuous animation for snake
-    const loop = (time: number) => {
-      if (gameOver) return;
-      if (time - lastMoveRef.current > SPEED) {
-        moveSnake();
-        lastMoveRef.current = time;
+
+    const fillUnoccupiedCells = () => {
+      let unoccupiedCells = unoccupiedCellsRef.current;
+      let cellId = toUnoccupiedCellId(
+        snakeRef.current[0].x,
+        snakeRef.current[0].y
+      );
+      // fill up unoccupied set for the first time
+      for (let i = 0; i < GRID_SIZE; i++) {
+        for (let j = 0; j < GRID_SIZE; j++) {
+          if (!unoccupiedCells.has(cellId)) {
+            unoccupiedCells.add(toUnoccupiedCellId(i, j));
+          }
+        }
       }
-      draw();
-      animationId = requestAnimationFrame(loop);
     };
+    fillUnoccupiedCells();
+    animationIdRef.current = requestAnimationFrame(loop);
 
-    animationId = requestAnimationFrame(loop);
-
-    return () => cancelAnimationFrame(animationId);
-  }, [isRunning, gameOver]);
+    return () => cancelAnimationFrame(animationIdRef.current);
+  }, [isRunning, gameOver, paused]);
 
   useEffect(() => {
     // listen to key press
     const handleKeyDown = (e: KeyboardEvent) => {
       const { x, y } = directionRef.current;
-      let direction: keyof Direction = "d";
+      let direction;
       switch (e.key) {
         case "ArrowUp":
           if (y === 0) direction = "u";
@@ -115,8 +139,10 @@ export const useSnake = (canvasRef: RefObject<HTMLCanvasElement | null>) => {
         default:
           break;
       }
-      directionRef.current = DIRECTIONS_MAP[direction];
+      if (direction)
+        directionRef.current = DIRECTIONS_MAP[direction as keyof Direction];
     };
+
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
@@ -124,11 +150,22 @@ export const useSnake = (canvasRef: RefObject<HTMLCanvasElement | null>) => {
   const handleStart = () => {
     snakeRef.current = INITIAL_SNAKE;
     directionRef.current = DIRECTIONS_MAP[INITIAL_DIRECTION];
-    foodRef.current = getRandomFood(snakeRef.current);
+    foodRef.current = getRandomFood(unoccupiedCellsRef.current);
     setScore(0);
     setGameOver(false);
     setIsRunning(true);
   };
+  const handlePause = () => {
+    setPaused(!paused);
+    setIsRunning(!isRunning);
+  };
 
-  return { score, gameOver, startGame: handleStart };
+  return {
+    isRunning,
+    score,
+    paused,
+    gameOver,
+    startGame: handleStart,
+    pauseGame: handlePause,
+  };
 };

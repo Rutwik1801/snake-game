@@ -4,7 +4,8 @@ import { GRID_SIZE, TILE_SIZE } from "../constants/constants";
 
 export const SnakeBoard = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const { gameOver, startGame, score } = useSnake(canvasRef);
+  const { isRunning, gameOver, paused, pauseGame, startGame, score } =
+    useSnake(canvasRef);
 
   return (
     <div>
@@ -20,7 +21,10 @@ export const SnakeBoard = () => {
         }}
       />
       <button onClick={() => startGame()}>
-        {gameOver ? "Restart" : "Start"}
+        {gameOver || isRunning ? "Restart" : "Start"}
+      </button>
+      <button disabled={gameOver} onClick={() => pauseGame()}>
+        {paused ? "Resume" : "Pause"}
       </button>
     </div>
   );
