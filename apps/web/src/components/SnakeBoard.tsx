@@ -1,23 +1,27 @@
-import { useEffect, useRef } from "react"
+import { useRef } from "react";
+import { useSnake } from "../hooks/useSnake";
+import { GRID_SIZE, TILE_SIZE } from "../constants/constants";
 
 export const SnakeBoard = () => {
-    const animationRef = useRef<number | null>(null)
-    const canvasRef = useRef(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const { gameOver, startGame, score } = useSnake(canvasRef);
 
-    const fillSnake = (time: number) => {
-        // const ctx = canvasRef.current.getContext("2D");
-        // if(ctx) {
-        //     ctx.fillRect(20,20,20,20)
-        // }
-    }
-    useEffect(() => {
-        animationRef.current = requestAnimationFrame(fillSnake);
-        return () => {
-            if(animationRef.current) cancelAnimationFrame(animationRef.current)
-            }
-    }, [])
-    return <div>
-        <canvas style={{backgroundColor: "black"}} ref={canvasRef} />
-
+  return (
+    <div>
+      <div>{score}</div>
+      <canvas
+        ref={canvasRef}
+        width={GRID_SIZE * TILE_SIZE}
+        height={GRID_SIZE * TILE_SIZE}
+        style={{
+          border: "2px solid #333",
+          background: "#111",
+          marginTop: 10,
+        }}
+      />
+      <button onClick={() => startGame()}>
+        {gameOver ? "Restart" : "Start"}
+      </button>
     </div>
-}
+  );
+};
