@@ -10,6 +10,12 @@ export const SnakeBoard = () => {
   return (
     <div>
       <div>{score}</div>
+            <button onClick={() => startGame()}>
+        {gameOver || isRunning ? "Restart" : "Start"}
+      </button>
+      <button disabled={gameOver} onClick={() => pauseGame()}>
+        {paused ? "Resume" : "Pause"}
+      </button>
       <canvas
         ref={canvasRef}
         width={GRID_SIZE * TILE_SIZE}
@@ -20,12 +26,6 @@ export const SnakeBoard = () => {
           marginTop: 10,
         }}
       />
-      <button onClick={() => startGame()}>
-        {gameOver || isRunning ? "Restart" : "Start"}
-      </button>
-      <button disabled={gameOver} onClick={() => pauseGame()}>
-        {paused ? "Resume" : "Pause"}
-      </button>
     </div>
   );
 };

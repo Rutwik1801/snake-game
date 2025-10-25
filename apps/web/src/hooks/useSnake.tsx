@@ -11,6 +11,7 @@ import type { CoOrdinateObject, Direction } from "../types/types";
 import { getRandomFood, toUnoccupiedCellId } from "../utils/utils";
 
 export const useSnake = (canvasRef: RefObject<HTMLCanvasElement | null>) => {
+const workerRef = useRef<Worker | null>(null)
   const unoccupiedCellsRef = useRef<Set<string>>(new Set());
   const animationIdRef = useRef<number>(0);
   const snakeRef = useRef<CoOrdinateObject[]>(INITIAL_SNAKE);
@@ -25,36 +26,6 @@ export const useSnake = (canvasRef: RefObject<HTMLCanvasElement | null>) => {
   const [gameOver, setGameOver] = useState<boolean>(false);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [paused, setPaused] = useState<boolean>(false);
-
-  //   calculates the next cell to hop on
-  const moveSnake = () => {
-    const newSnake = [...snakeRef.current];
-    const head = newSnake[0];
-    const newHead = {
-      x: (head.x + directionRef.current.x + GRID_SIZE) % GRID_SIZE,
-      y: (head.y + directionRef.current.y + GRID_SIZE) % GRID_SIZE,
-    };
-    unoccupiedCellsRef.current.delete(toUnoccupiedCellId(newHead.x, newHead.y));
-
-    if (newSnake.some((seg) => seg.x === newHead.x && seg.y === newHead.y)) {
-      setGameOver(true);
-      setIsRunning(false);
-      return;
-    }
-
-    newSnake.unshift(newHead);
-
-    if (newHead.x === foodRef.current.x && newHead.y === foodRef.current.y) {
-      setScore((prev) => prev + 1);
-      foodRef.current = getRandomFood(unoccupiedCellsRef.current);
-    } else {
-      let tail = newSnake.pop();
-      if (tail)
-        unoccupiedCellsRef.current.add(toUnoccupiedCellId(tail.x, tail.y));
-    }
-
-    snakeRef.current = newSnake;
-  };
 
   //   draws the snake and food on canvas
   const draw = () => {
@@ -82,15 +53,22 @@ export const useSnake = (canvasRef: RefObject<HTMLCanvasElement | null>) => {
       }
     }
   };
-
+  const drawCanvas = (time: number) => {
+        if (time - lastMoveRef.current > SPEED) {
+      workerRef.current?.postMessage({snake: snakeRef.current,
+        direction: directionRef.current,
+        unoccupiedCells: unoccupiedCellsRef.current,
+        food: foodRef.current,
+        score: score
+      })
+      lastMoveRef.current = time;
+      draw();
+    }
+  }
   // continuous animation for snake
   const loop = (time: number) => {
     if (gameOver) return;
-    if (time - lastMoveRef.current > SPEED) {
-      moveSnake();
-      lastMoveRef.current = time;
-    }
-    draw();
+    drawCanvas(time)
     animationIdRef.current = requestAnimationFrame(loop);
   };
 
@@ -146,6 +124,29 @@ export const useSnake = (canvasRef: RefObject<HTMLCanvasElement | null>) => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  // worker for calculations
+  useEffect(() => {
+  const worker = new Worker(new URL("../worker/worker.js", import.meta.url), { type: 'module' })
+  workerRef.current = worker
+
+  worker.onmessage = (e) => {
+    const {type, snake, food, unoccupiedCells, score} = e.data;
+
+  if(type === "move") {
+    snakeRef.current = snake;
+    foodRef.current = food;
+    unoccupiedCellsRef.current = unoccupiedCells
+    setScore(score)
+  } else {
+    setGameOver(true)
+    setIsRunning(false)
+  }
+  }
+  worker.onerror = (err) => console.error('Worker error:', err)
+
+  return () => worker.terminate()
+}, [])
 
   const handleStart = () => {
     snakeRef.current = INITIAL_SNAKE;
